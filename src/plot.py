@@ -1,7 +1,8 @@
-import imageio
+import imageio.v2 as imageio  # [MOD] usar v2 para evitar deprecation warnings
 import numpy as np
 from matplotlib import colors
 import matplotlib.pyplot as plt
+import os  # [MOD] para asegurar carpetas y rutas
 
 from analysis import Analysis
 ANALYSIS = Analysis()
@@ -20,6 +21,8 @@ class Plotter():
         lsr_correction = kwargs["lsr_correction"]
         freq_correction = ANALYSIS.freqFromRadialVel(barycenter_correction + lsr_correction) - ANALYSIS.H_FREQUENCY
         SNR, radial_velocity = kwargs["SNR"], kwargs["observed_radial_velocity"]
+        utc_time = kwargs.get("utc_time", "N/A")  # [NEW] get UTC time if provided
+        os.makedirs("Spectrums", exist_ok=True)
 
         if self.SHOW_MAP:
             fig = plt.figure(figsize=(20,12))
@@ -35,7 +38,7 @@ class Plotter():
             self.spectrumGrid(spectrum_ax, 'Observed spectrum', freqs, data)
             self.spectrumGrid(corrected_spectrum_ax, 'Corrected spectrum w.r.t. LSR', np.add(freqs, freq_correction), data)
             self.skyGrid(sky_ax, ra, dec)
-            self.detailsGrid(details_ax, ra, dec, gal_lon, gal_lat, barycenter_correction, lsr_correction, radial_velocity, SNR)
+            self.detailsGrid(details_ax, ra, dec, gal_lon, gal_lat, barycenter_correction, lsr_correction, radial_velocity, SNR, utc_time)  # pass UTC time
 
             # Share y-axis for spectrums
             corrected_spectrum_ax.set_yticklabels([])
@@ -44,23 +47,20 @@ class Plotter():
         else:
             fig, ax = plt.subplots(figsize = (12, 7))
             self.spectrumGrid(ax, "Observed spectrum", freqs, data)
-        
-
         # Saves plot
         path = f'./Spectrums/ra={ra},dec={dec}.png'
         plt.tight_layout(pad = 1.75)
         plt.savefig(path, dpi = 100)
         plt.close()
 
-    
     # Arrange detail grid
     # TODO: Redesign table. Perhaps into two subplots
-    def detailsGrid(self, ax, ra, dec,gal_lon, gal_lat, barycenter_correction, lsr_correction, radial_velocity, SNR):
+    def detailsGrid(self, ax, ra, dec, gal_lon, gal_lat, barycenter_correction, lsr_correction, radial_velocity, SNR, utc_time="N/A"):
         ax.axis('off')
 
         source_vel = np.round(radial_velocity + barycenter_correction + lsr_correction, 2)
         title = ['Values']
-        labels = [r'RA/Dec', r'Galactic $l$/$b$', 'Peak SNR', 'Observed\nradial velocity', 'Radial correction\nfor barycenter', 'Radial correction\nfor LSR', 'Corrected\nsource velocity']
+        labels = [r'RA/Dec', r'Galactic $l$/$b$', 'Peak SNR', 'Observed\nradial velocity', 'Radial correction\nfor barycenter', 'Radial correction\nfor LSR', 'Corrected\nsource velocity', 'UTC time']  # [NEW] UTC row
         values = [
             [fr'RA={ra}$^\circ$, Dec={dec}$^\circ$'],
             [fr'$l$={gal_lon}$^\circ$, $b$={gal_lat}$^\circ$'],
@@ -68,26 +68,31 @@ class Plotter():
             [f'{radial_velocity}' + r'$\frac{km}{s}$'],
             [f'{barycenter_correction}' + r'$\frac{km}{s}$'],
             [f'{lsr_correction}' + r'$\frac{km}{s}$'],
-            [f'{source_vel}' + r'$\frac{km}{s}$']]
+            [f'{source_vel}' + r'$\frac{km}{s}$'],
+            [utc_time]  # [NEW]
+        ]
 
         loc = 'center'
         colwidth = [0.5, 0.2]
-        color = [colors.to_rgba('g', 0.5)]*7
+        color = [colors.to_rgba('g', 0.5)]*len(labels)
 
         table = ax.table(cellText = values, colLabels = title, rowLabels = labels, colColours = color, rowColours = color, rowLoc = loc, cellLoc = loc, loc = 9, colWidths = colwidth)
         table.auto_set_font_size(False)
         table.set_fontsize(14)
         table.scale(1, 2.25)
-    
-    
+
+
     # Arrange sky grid
     def skyGrid(self, ax, ra, dec):
         ax.set(title = 'Milky Way H-line map')
 
         # Huge thanks to the Virgo and Pictor project for sharing their code for the hydrogen line map!
-        img = np.loadtxt('src/map.txt')
-        flipimg = np.flip(img, 1)
-        ax.imshow(flipimg, extent = [360, 0, -90, 90], interpolation = 'none')
+        try:  # [MOD] control de error si falta el mapa
+            img = np.loadtxt('src/map.txt')
+            flipimg = np.flip(img, 1)
+            ax.imshow(flipimg, extent = [360, 0, -90, 90], interpolation = 'none')
+        except FileNotFoundError:
+            print("Warning: src/map.txt not found, skipping sky map.")
 
         # Axis labels
         ax.set(xlabel = 'Right ascension / degrees', ylabel = 'Declination / degrees')
@@ -120,7 +125,7 @@ class Plotter():
         ax.grid()
 
         # Adds y-axis interval if supplied in config.txt
-        if 0.0 == self.Y_MIN == self.Y_MAX:
+        if self.Y_MIN == 0.0 and self.Y_MAX == 0.0:  # [MOD] condición más legible
             ax.autoscale(enable = True, axis = 'y')
         else:
             ax.set(ylim = [self.Y_MIN, self.Y_MAX])
@@ -133,6 +138,17 @@ class Plotter():
     # Generates and saves a GIF of 24H observations
     def generateGIF(self, ra, dec):
         print('Generating GIF from observations... This may take a while')
+        # [MOD] asegurar carpeta Spectrums
+        os.makedirs("Spectrums", exist_ok=True)
         path = f'Spectrums/ra={ra[0]},dec={dec}.gif'
-        images = [imageio.imread(f'Spectrums/ra={coord},dec={dec}.png') for coord in ra]
-        imageio.mimsave(path, images)
+        images = []
+        for coord in ra:  # [MOD] control de errores al cargar imágenes
+            file_path = f'Spectrums/ra={coord},dec={dec}.png'
+            if os.path.exists(file_path):
+                images.append(imageio.imread(file_path))
+            else:
+                print(f"Warning: {file_path} not found, skipping.")
+        if images:
+            imageio.mimsave(path, images)
+        else:
+            print("No images found for GIF generation.")
