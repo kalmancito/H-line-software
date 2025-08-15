@@ -26,25 +26,30 @@ def main(config):
         # Checks if 360 is divisable with the degree interval and calculates number of collections
         try:
             deg_interval = OBSERVATION_PARAM["degree_interval"]
-            num_data = int(360/deg_interval) if (360/deg_interval).is_integer() else ValueError
-            second_interval = 24*60**2/num_data
-        except:
-            print("Degree interval not divisable with 360 degrees")
+            # [MOD] Correct validation with real exception and readable calculation
+            if 360 % deg_interval != 0:
+                raise ValueError("Degree interval not divisible by 360 degrees")
+            num_data = 360 // deg_interval
+            second_interval = 86400 / num_data  # 24h in seconds
+        except Exception as e:
+            print(f"Error: {e}")
             quit()
     else:
         num_data = 1
+        second_interval = 0  # [MOD] to avoid undefined variable
 
     # Do observation(s)
     # Start time of observation
     current_time = datetime.now(timezone.utc)
     for i in range(num_data):
-        COORD_CLASS = Observation.getCoordinates(current_time + timedelta(seconds = 24*60**2/num_data * i), **OBSERVER_PARAM)
-        print(current_time + timedelta(seconds = 24*60**2/num_data * i))
+        COORD_CLASS = Observation.getCoordinates(current_time + timedelta(seconds = second_interval * i), **OBSERVER_PARAM)
+        print(current_time + timedelta(seconds = second_interval * i))
         
         print(f"Started observing! - {current_time}")
         print(f"Receiving {DSP_PARAM['number_of_fft']} FFT's of {2**DSP_PARAM['resolution']} samples")
 
-        with contextlib.redirect_stdout(None):
+        # [MOD] Redirect stdout to file to avoid losing internal logs
+        with open("collect.log", "a") as f, contextlib.redirect_stdout(f):
             Observation.collectData(sdr, SDR_PARAM["sample_rate"], **DSP_PARAM)
         print("Analyzing data...")
         Observation.analyzeData(COORD_CLASS)
@@ -67,16 +72,22 @@ def main(config):
         if num_data > 1:
             end_time = current_time + timedelta(seconds = second_interval * (i + 1))
             time_remaining = end_time - datetime.now(timezone.utc)
-            print(f'Waiting for next data collection in {time_remaining.total_seconds()} seconds')
-            sleep(time_remaining.total_seconds())
+            # [MOD] Avoid negative sleep
+            delay = time_remaining.total_seconds()
+            if delay > 0:
+                print(f'Waiting for next data collection in {delay} seconds')
+                sleep(delay)
+            else:
+                print("Warning: Negative delay detected — skipping sleep")
             clear_console()
 
 
 # Reads user config
 def read_config():
     path = 'config.json'
-    config = open(path, 'r')
-    parsed_config = json.load(config)
+    # [MOD] Use with open to automatically close the file
+    with open(path, 'r') as config:
+        parsed_config = json.load(config)
     main(parsed_config)
 
 
