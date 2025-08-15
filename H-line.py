@@ -1,7 +1,7 @@
 import contextlib
 import os, sys, json
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Import necessary classes/modules
 sys.path.append("src/")
@@ -36,7 +36,7 @@ def main(config):
 
     # Do observation(s)
     # Start time of observation
-    current_time = datetime.utcnow()
+    current_time = datetime.now(timezone.utc)
     for i in range(num_data):
         COORD_CLASS = Observation.getCoordinates(current_time + timedelta(seconds = 24*60**2/num_data * i), **OBSERVER_PARAM)
         print(current_time + timedelta(seconds = 24*60**2/num_data * i))
@@ -66,7 +66,7 @@ def main(config):
         # Wait for next execution
         if num_data > 1:
             end_time = current_time + timedelta(seconds = second_interval * (i + 1))
-            time_remaining = end_time - datetime.utcnow()
+            time_remaining = end_time - datetime.now(timezone.utc)
             print(f'Waiting for next data collection in {time_remaining.total_seconds()} seconds')
             sleep(time_remaining.total_seconds())
             clear_console()
