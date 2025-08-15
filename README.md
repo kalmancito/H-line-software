@@ -52,6 +52,33 @@ sudo apt install librtlsdr-dev
 If you're using windows, you need to manually download the rtl-sdr drivers and add them to system PATH.
 Download the [rtl-sdr drivers for windows](https://osmocom.org/attachments/2242/RelWithDebInfo.zip) and add the files from the [rtl-sdr drivers](https://ftp.osmocom.org/binaries/windows/rtl-sdr/) into the X64 folder, overwriting any files that may already exist. The "X64" folder has to be added to PATH under system variables.
 
+### Setting up the Python environment (recommended)
+
+To ensure a clean and working environment for H-line, it is recommended to use a Python virtual environment. Follow these steps:
+
+```bash
+# 1. Exit any broken virtual environment
+deactivate 2>/dev/null
+
+# 2. Remove old or broken virtual environment
+rm -rf venv
+
+# 3. Create a new virtual environment
+python3 -m venv venv
+
+# 4. Activate the new virtual environment
+source venv/bin/activate
+
+# 5. Upgrade pip inside the virtual environment
+python -m pip install --upgrade pip
+
+# 6. Install all required packages
+pip install -r requirements.txt
+
+# 7. Run the H-line script
+python H-line.py
+
+
 ## Usage
 The software can be run headless on a remote Raspberry pi for example or with the help of the user interface. The following section will describe necessary information about both usage cases.
 
